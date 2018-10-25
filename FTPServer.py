@@ -13,7 +13,7 @@ import sys
 import csv
 import os
 
-Clients = []
+CLIENTS = []
 USER_FILE = "users.csv"
 BUFFER_SIZE = 1024
 PORT_NUM = None
@@ -140,6 +140,7 @@ def initializeGlobals():
 
 
 def main():
+    global CLIENTS
     initializeGlobals()
 
     RECV_SOCKET = socket(AF_INET, SOCK_STREAM)
@@ -150,7 +151,7 @@ def main():
         newSocket, newAddress = RECV_SOCKET.accept()
         print("Connection from " + str(newAddress))
         newClient = FTPClient(newAddress[0], newAddress[1], newSocket)
-        Clients.append(newClient)
+        CLIENTS.append(newClient)
         newSocket.send("220 Welcome to Alex's FTP Server\r\n")
         newClient.start()
 
