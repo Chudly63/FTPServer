@@ -1,9 +1,11 @@
-"""
-requestParser.py
-Alex M Brown
-Parses FTP requests into lists containing the command name and any extra parameters
-"""
+#!/usr/bin/env python
+# CS472 - Homework #3 - Request Parser
+# Alex M Brown
+# requestParser.py
+#
+# Parses strings representing FTP commands into a list containing the command and its parameters
 
+"""Returns true if str can be converted to an Integer"""
 def isInt(str):
     try:
         x = int(str)
@@ -11,10 +13,16 @@ def isInt(str):
     except:
         return False
 
-
-#A return value of None represents a non-supported command
-#A return value of -1 represents invalid syntax
-#A valid command will return a list with the command and any parameters
+"""
+Parses a string into a list containing an FTP command and its parameters
+Example: parseCommand("EPRT |1|127.0.0.1|21|") -> ['EPRT','1','127.0.0.1', '21']
+Input:
+    str command : A string representing an FTP command
+Output:
+    None : Non-Supported Command
+    -1   : Invalid Command Syntax
+    List : Contains FTP command and its parameters
+"""
 def parseCommand(command):
     COMMANDS_WITH_ONE_PARAMETER = ['USER', 'PASS', 'CWD', 'RETR', 'STOR'] 
     COMMANDS_WITH_NO_PARAMETERS = ['CDUP', 'QUIT', 'PASV', 'PWD', 'SYST'] 
