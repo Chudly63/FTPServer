@@ -8,7 +8,9 @@
 from socket import *
 from threading import Thread
 from requestParser import parseCommand
+from Responses import responseCode
 import argparse
+import platform
 import sys
 import csv
 import os
@@ -22,6 +24,7 @@ VERBOSE = False
 USERS = {}
 CRLF = "\r\n"
 
+#[Errno 98] Address already in use
 
 """
 FTPClient Class. Extension of python's Thread class.
@@ -42,10 +45,10 @@ class FTPClient(Thread):
 
     def readCommand(self):
         try:
-            command = self.sock.recv(BUFFER_SIZE)
-            if command == "":
+            self.command = self.sock.recv(BUFFER_SIZE)
+            if self.command == "":
                 return None
-            return command
+            return self.command
         except:
             return None  
 
@@ -57,47 +60,112 @@ class FTPClient(Thread):
             return False
 
 
+    def ftp_user(self):
+        if not self.state == "Prompt USER":
+            self.sendResponse(responseCode[503])
+        else:
+            self.user = self.myCommand[1]
+            self.state = "Prompt PASS"
+            self.sendResponse(responseCode[331])
+
+    def ftp_pass(self):
+        if not self.state == "Prompt PASS":
+            self.sendResponse(responseCode[503])
+        elif not self.user in USERS.keys():
+            self.sendResponse(responseCode[530])
+            self.state = "Prompt USER"
+        elif self.myCommand[1] == USERS[self.user]:
+            self.state = "Main"
+            self.authenticated = True
+            self.sendResponse(responseCode[230])
+        else:
+            self.sendResponse(responseCode[530])
+            self.state = "Prompt USER"
+
+    def ftp_cwd(self):
+        self.sendResponse(responseCode[502])
+
+    def ftp_quit(self):
+        self.sendResponse(responseCode[502])
+
+    def ftp_pasv(self):
+        self.sendResponse(responseCode[502])
+
+    def ftp_epsv(self):
+        self.sendResponse(responseCode[502])
+
+    def ftp_port(self):
+        self.sendResponse(responseCode[502])
+
+    def ftp_eprt(self):
+        self.sendResponse(responseCode[502])
+
+    def ftp_retr(self):
+        self.sendResponse(responseCode[502])
+
+    def ftp_stor(self):
+        self.sendResponse(responseCode[502])
+
+    def ftp_pwd(self):
+        if not self.authenticated:
+            self.sendResponse(responseCode[530])
+        elif not self.state == "Main":
+            self.sendResponse(responseCode[503])
+        else:
+            self.sendResponse("257 " + str(self.directory) + " is the current working directory")
+
+    def ftp_list(self):
+        self.sendResponse(responseCode[502])
+
+    def ftp_syst(self):
+        if not self.authenticated:
+            self.sendResponse(responseCode[530])
+        elif not self.state == "Main":
+            self.sendResponse(responseCode[503])
+        else:
+            self.sendResponse("215 " + str(platform.system()))
+        
+    def ftp_help(self):
+        self.sendResponse(responseCode[502])
+
     def run(self):
+
+        self.SUPPORTED_COMMANDS = {
+            "USER" : self.ftp_user,
+            "PASS" : self.ftp_pass,
+            "CWD"  : self.ftp_cwd,
+            "QUIT" : self.ftp_quit,
+            "PASV" : self.ftp_pasv,
+            "EPSV" : self.ftp_epsv,
+            "PORT" : self.ftp_port,
+            "EPRT" : self.ftp_eprt,
+            "RETR" : self.ftp_retr,
+            "STOR" : self.ftp_stor,
+            "PWD"  : self.ftp_pwd,
+            "LIST" : self.ftp_list,
+            "SYST" : self.ftp_syst,
+            "HELP" : self.ftp_help
+        }
+
         while True:
-            myCommand = self.readCommand()
-            if myCommand == None:
+            self.myCommand = self.readCommand()
+            if self.myCommand == None:
                 self.sock.close()
                 break
             else:
-                myCommand = parseCommand(myCommand)
-            print(myCommand)
+                self.myCommand = parseCommand(self.myCommand)
 
-            if myCommand == None:
-                self.sendResponse("502 Command not implemented.")
+            print(self.myCommand)
 
-            elif myCommand == -1:
-                self.sendResponse("501 Syntax error in parameters.")
+            if self.myCommand == None:
+                self.sendResponse(responseCode[500])
 
-
-            elif myCommand[0] == "USER":
-                if not self.state == "Prompt USER":
-                    self.sendResponse("503 Bad sequence of commands.")
-                else:
-                    self.user = myCommand[1]
-                    self.state = "Prompt PASS"
-                    self.sendResponse("331 User OK, need password.")
-
-
-            elif myCommand[0] == "PASS":
-                if not self.state == "Prompt PASS":
-                    self.sendResponse("503 Bad sequence of commands.")
-                elif not self.user in USERS.keys():
-                    self.sendResponse("530 Failed to authenticate user.")
-                    self.state = "Prompt USER"
-                elif myCommand[1] == USERS[self.user]:
-                    self.state = "Main"
-                    self.authenticated = True
-                    self.sendResponse("230 User logged in, proceed.")
-                else:
-                    self.sendResponse("530 Failed to authenticate user.")
-                    self.state = "Prompt USER"
-
-
+            elif self.myCommand == -1:
+                self.sendResponse(responseCode[501])
+            elif self.myCommand[0] in self.SUPPORTED_COMMANDS.keys():
+                self.SUPPORTED_COMMANDS[self.myCommand[0]]()
+            else:
+                self.sendResponse(responseCode[502])
 
 
 
