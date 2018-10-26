@@ -11,11 +11,14 @@ from requestParser import parseCommand
 from Responses import responseCode
 import argparse
 import platform
+import datetime
+import stat
 import sys
 import csv
 import os
 
 CLIENTS = []
+MAIN_PATH = os.path.join(os.getcwd(),"FTP_ROOT")    #Location of the FTP environment. Will be created if it does not exist
 USER_FILE = "users.csv"
 BUFFER_SIZE = 1024
 PORT_NUM = None
@@ -41,7 +44,7 @@ class FTPClient(Thread):
         self.user = None
         self.state = "Prompt USER" 
         self.authenticated = False
-        self.directory = os.getcwd()
+        self.directory = MAIN_PATH
 
     def readCommand(self):
         try:
@@ -83,6 +86,25 @@ class FTPClient(Thread):
             self.state = "Prompt USER"
 
     def ftp_cwd(self):
+        if not self.state == "Main":
+            print("Me")
+            self.sendResponse(responseCode[503])
+        elif not self.authenticated:
+            self.sendResponse(responseCode[530])
+        else:
+            self.myDir = self.myCommand[1]
+            self.myDirPath = os.path.join(self.directory, self.myDir)
+            if os.path.exists(self.myDirPath) and os.path.isdir(self.myDirPath):
+                self.realDirPath = os.path.realpath(self.myDirPath)
+                if not self.realDirPath.startswith(MAIN_PATH):
+                    self.sendResponse(responseCode[550])
+                else:
+                    self.directory = self.realDirPath
+                    self.sendResponse(responseCode[250])
+            else:
+                self.sendResponse(responseCode[550])
+    
+    def ftp_cdup(self):
         self.sendResponse(responseCode[502])
 
     def ftp_quit(self):
@@ -112,7 +134,10 @@ class FTPClient(Thread):
         elif not self.state == "Main":
             self.sendResponse(responseCode[503])
         else:
-            self.sendResponse("257 " + str(self.directory) + " is the current working directory")
+            self.showDir = self.directory[len(MAIN_PATH):]
+            if self.showDir == "":
+                self.showDir = "/"
+            self.sendResponse("257 " + str(self.showDir) + " is the current working directory")
 
     def ftp_list(self):
         self.sendResponse(responseCode[502])
@@ -134,6 +159,7 @@ class FTPClient(Thread):
             "USER" : self.ftp_user,
             "PASS" : self.ftp_pass,
             "CWD"  : self.ftp_cwd,
+            "CDUP" : self.ftp_cdup,
             "QUIT" : self.ftp_quit,
             "PASV" : self.ftp_pasv,
             "EPSV" : self.ftp_epsv,
@@ -209,6 +235,11 @@ def initializeGlobals():
 
 def main():
     global CLIENTS
+
+    #Set up an FTP environment if it does not already exist
+    if not os.path.isdir(MAIN_PATH):
+        os.makedirs(MAIN_PATH)
+
     initializeGlobals()
 
     RECV_SOCKET = socket(AF_INET, SOCK_STREAM)
