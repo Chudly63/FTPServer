@@ -69,6 +69,7 @@ class FTPClient(Thread):
         except:
             return False
 
+    #ACCESS CONTROL COMMANDS
 
     def ftp_user(self):
         #Verify the state of the client
@@ -121,10 +122,22 @@ class FTPClient(Thread):
                 self.sendResponse(responseCode[550])
     
     def ftp_cdup(self):
-        self.sendResponse(responseCode[502])
+        if not self.state == "Main":
+            self.sendResponse(responseCode[503])
+        elif not self.authenticated:
+            self.sendResponse(responseCode[530])
+        else:
+            if self.directory == MAIN_PATH:
+                self.sendResponse(responseCode[550])
+            else:
+                self.directory = os.path.split(self.directory)[0]
+                self.sendResponse(responseCode[250])
+                
 
     def ftp_quit(self):
         self.sendResponse(responseCode[502])
+
+    #DATA TRANSFER COMMANDS
 
     def ftp_pasv(self):
         self.sendResponse(responseCode[502])
@@ -143,6 +156,8 @@ class FTPClient(Thread):
 
     def ftp_stor(self):
         self.sendResponse(responseCode[502])
+
+    #SYSTEM COMMANDS
 
     def ftp_pwd(self):
         #Verify the state of the client
