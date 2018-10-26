@@ -17,8 +17,15 @@ import sys
 import csv
 import os
 
+#Location of the FTP environment. Will be created if it does not exist
+
+MAIN_PATH = os.path.join(os.getcwd(),"FTP_ROOT")    
+
+#FTP environment will be a folder called FTP_ROOT that is located in the directory where FTPServer.py
+#is being run. Clients will only be able to interact with files within this environment.
+
+#Other GLOBALS
 CLIENTS = []
-MAIN_PATH = os.path.join(os.getcwd(),"FTP_ROOT")    #Location of the FTP environment. Will be created if it does not exist
 USER_FILE = "users.csv"
 BUFFER_SIZE = 1024
 PORT_NUM = None
@@ -64,6 +71,7 @@ class FTPClient(Thread):
 
 
     def ftp_user(self):
+        #Verify the state of the client
         if not self.state == "Prompt USER":
             self.sendResponse(responseCode[503])
         else:
@@ -72,11 +80,14 @@ class FTPClient(Thread):
             self.sendResponse(responseCode[331])
 
     def ftp_pass(self):
+        #Verify the state of the client
         if not self.state == "Prompt PASS":
             self.sendResponse(responseCode[503])
+        #Does the username of the client appear in the USER base?
         elif not self.user in USERS.keys():
             self.sendResponse(responseCode[530])
             self.state = "Prompt USER"
+        #Is the password correct for the current user?
         elif self.myCommand[1] == USERS[self.user]:
             self.state = "Main"
             self.authenticated = True
@@ -86,19 +97,24 @@ class FTPClient(Thread):
             self.state = "Prompt USER"
 
     def ftp_cwd(self):
+        #Verify the state of the client
         if not self.state == "Main":
-            print("Me")
             self.sendResponse(responseCode[503])
+        #Verify the client is authenticated
         elif not self.authenticated:
             self.sendResponse(responseCode[530])
         else:
+            #Generate the path to the requested directory and verify it exists
             self.myDir = self.myCommand[1]
             self.myDirPath = os.path.join(self.directory, self.myDir)
             if os.path.exists(self.myDirPath) and os.path.isdir(self.myDirPath):
+                #Generate the actual path to the directory. (Example: Converts Root/Dir1/../Dir2 into Root/Dir2)
                 self.realDirPath = os.path.realpath(self.myDirPath)
+                #Make sure the requested directory is within the FTP environment
                 if not self.realDirPath.startswith(MAIN_PATH):
                     self.sendResponse(responseCode[550])
                 else:
+                    #Change the client's directory
                     self.directory = self.realDirPath
                     self.sendResponse(responseCode[250])
             else:
@@ -129,12 +145,17 @@ class FTPClient(Thread):
         self.sendResponse(responseCode[502])
 
     def ftp_pwd(self):
-        if not self.authenticated:
-            self.sendResponse(responseCode[530])
-        elif not self.state == "Main":
+        #Verify the state of the client
+        if not self.state == "Main":
             self.sendResponse(responseCode[503])
+        #Verify the user is authenticated
+        elif not self.authenticated:
+            self.sendResponse(responseCode[530])
         else:
+            #When showing the current directory, only show the path extending from the 
+            #root of the FTP environment directory
             self.showDir = self.directory[len(MAIN_PATH):]
+            #If the current directory is the root of the FTP environment directory, indicate this with a /
             if self.showDir == "":
                 self.showDir = "/"
             self.sendResponse("257 " + str(self.showDir) + " is the current working directory")
