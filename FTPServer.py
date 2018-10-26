@@ -34,6 +34,14 @@ VERBOSE = False
 USERS = {}
 CRLF = "\r\n"
 
+def log(message):
+    if VERBOSE:
+        print("#LOG: " + message)
+    with open(LOG_FILE, "a+") as logfile:
+        logtime = str(datetime.datetime.now())[:-3]
+        logfile.write(logtime + ": " + message + "\n")
+
+
 #[Errno 98] Address already in use
 
 """
@@ -58,12 +66,14 @@ class FTPClient(Thread):
             self.command = self.sock.recv(BUFFER_SIZE)
             if self.command == "":
                 return None
+            log("(" + self.ip + ", " + str(self.port) + ") READ: " + self.command[:-2])
             return self.command
         except:
             return None  
 
     def sendResponse(self, msg):
         try:
+            log("(" + self.ip + ", " + str(self.port) + ") SENT: " + msg)
             self.sock.send(msg + CRLF)
             return True
         except:
@@ -93,6 +103,7 @@ class FTPClient(Thread):
             self.state = "Main"
             self.authenticated = True
             self.sendResponse(responseCode[230])
+            log("(" + self.ip + ", " + str(self.port) + ") NOTE: User logged in: " + self.user)
         else:
             self.sendResponse(responseCode[530])
             self.state = "Prompt USER"
@@ -132,7 +143,7 @@ class FTPClient(Thread):
             else:
                 self.directory = os.path.split(self.directory)[0]
                 self.sendResponse(responseCode[250])
-                
+
 
     def ftp_quit(self):
         self.sendResponse(responseCode[502])
@@ -231,9 +242,7 @@ class FTPClient(Thread):
 
 
 
-def log(message):
-    if VERBOSE:
-        print(message)
+
 
 
 
@@ -269,6 +278,7 @@ def initializeGlobals():
 
 
 
+
 def main():
     global CLIENTS
 
@@ -278,13 +288,16 @@ def main():
 
     initializeGlobals()
 
+    log("------------------------------New Session------------------------------")
+
     RECV_SOCKET = socket(AF_INET, SOCK_STREAM)
     RECV_SOCKET.bind(('',PORT_NUM))
     RECV_SOCKET.listen(5)
     print("Ready...")
+    log("SERVER LISTENING ON SOCKET: " + str(RECV_SOCKET.getsockname()))
     while True:
         newSocket, newAddress = RECV_SOCKET.accept()
-        print("Connection from " + str(newAddress))
+        log("(" + newAddress[0] + ", " + str(newAddress[1]) + ") NOTE: Connected")
         newClient = FTPClient(newAddress[0], newAddress[1], newSocket)
         CLIENTS.append(newClient)
         newSocket.send("220 Welcome to Alex's FTP Server\r\n")
