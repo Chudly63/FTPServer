@@ -13,6 +13,7 @@ import argparse
 import platform
 import datetime
 import stat
+import time
 import sys
 import csv
 import os
@@ -95,6 +96,27 @@ class FTPClient(Thread):
             log("(" + self.ip + ", " + str(self.port) + ") NOTE: Failed to receive connection")
             return None
         
+    """Reads all data from socket"""
+    def recvall(self, socket):
+        log("(" + self.ip + ", " + str(self.port) + ") READ: DATA OVER DATA CONNECTION")
+        self.data = b''
+        while(True):
+            self.resp = socket.recv(BUFFER_SIZE)
+            if len(self.resp) == 0:
+                return self.data
+            else:
+                self.data += self.resp
+
+
+    """Read all data from socket and store it in a file"""
+    def readFile(self, filename, socket):
+        try:
+            self.newFile = open(filename, "wb")
+        except:
+            return False
+        self.newFile.write(self.recvall(socket))
+        self.newFile.close()
+        return True
 
     """Read command from client"""
     def readCommand(self):
@@ -289,7 +311,36 @@ class FTPClient(Thread):
 
     """FTP STOR COMMAND"""
     def ftp_stor(self):
-        self.sendResponse(responseCode[502])
+        if not self.state == "Main":
+            self.sendResponse(responseCode[503])
+        elif not self.authenticated:
+            self.sendResponse(responseCode[530])
+        else:
+            self.stor_file = os.path.realpath(os.path.join(self.directory, self.myCommand[1]))
+            
+            if not self.stor_file.startswith(MAIN_PATH):
+                self.sendResponse(responseCode[553])
+                return
+
+            if self.active:
+                #Connect to client's data port
+                self.DATA_SOCKET = self.establishConnection(self.data_address)
+            else:
+                #Accept a connection from the client
+                self.DATA_SOCKET = self.receiveConnection(self.DATA_SOCKET)
+
+            if not self.DATA_SOCKET:
+                self.sendResponse(responseCode[425])
+            else:
+                self.sendResponse(responseCode[150])
+                if self.readFile(self.stor_file, self.DATA_SOCKET):
+                    self.sendResponse(responseCode[226])
+                else:
+                    self.sendResponse(responseCode[426])
+                
+                self.DATA_SOCKET.close()
+                self.DATA_SOCKET = None
+
 
     #SYSTEM COMMANDS
 

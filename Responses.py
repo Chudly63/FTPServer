@@ -13,5 +13,6 @@ responseCode = {
     502 : "502 Command not implemented.",
     503 : "503 Bad sequence of commands.",
     530 : "530 Failed to authenticate user.",
-    550 : "550 Requested action not taken."
+    550 : "550 Requested action not taken.",
+    553 : "553 File location not allowed."
 }
