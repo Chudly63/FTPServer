@@ -108,19 +108,25 @@ class FTPClient(Thread):
 
         return self.permString
 
+
+    """Get the full listing information for myFile"""
+    def getFileListing(self, myFile):
+        self.fileInfo = os.stat(myFile)
+        self.filePermissions = self.convertPermissions(self.fileInfo[0])
+        self.fileLinks = str(self.fileInfo[3])
+        self.fileOwner = str(self.fileInfo[4])
+        self.fileGroup = str(self.fileInfo[5])
+        self.fileSize = str(self.fileInfo[6])
+        self.fileModified = datetime.datetime.fromtimestamp(self.fileInfo[8]).strftime("%b %d %H:%M")
+        self.fileName = os.path.basename(myFile)
+        return self.filePermissions + "\t" + self.fileLinks + " " + self.fileOwner + "\t" + self.fileGroup + "\t" + self.fileSize + "\t" + self.fileModified + "\t" + self.fileName + CRLF
+
+
     """Get the full listing information for every file/directory in the current directory"""
-    def getDirectoryListing(self):
+    def getDirectoryListing(self, directory):
         self.Listing = ""
-        for self.f in sorted(os.listdir(self.directory)):
-            self.fileInfo = os.stat(os.path.join(self.directory, self.f))
-            self.filePermissions = self.convertPermissions(self.fileInfo[0])
-            self.fileLinks = str(self.fileInfo[3])
-            self.fileOwner = str(self.fileInfo[4])
-            self.fileGroup = str(self.fileInfo[5])
-            self.fileSize = str(self.fileInfo[6])
-            self.fileModified = datetime.datetime.fromtimestamp(self.fileInfo[8]).strftime("%b %d %H:%M")
-            self.fileName = self.f
-            self.Listing += self.filePermissions + "\t" + self.fileLinks + " " + self.fileOwner + "\t" + self.fileGroup + "\t" + self.fileSize + "\t" + self.fileModified + "\t" + self.fileName + CRLF
+        for self.f in sorted(os.listdir(directory)):
+            self.Listing += self.getFileListing(os.path.join(directory, self.f))
         
         return self.Listing
 
@@ -266,13 +272,40 @@ class FTPClient(Thread):
 
     """FTP LIST COMMAND"""
     def ftp_list(self):
+        #Verify the state of the client
         if not self.state == "Main":
             self.sendResponse(responseCode[503])
+        #Verify the client is authenticated
         elif not self.authenticated:
             self.sendResponse(responseCode[530])
+        #Verify that a data connection is prepared
         elif not self.DATA_SOCKET:
             self.sendResponse(responseCode[425])
         else:
+            #Check if the list parameter is a valid file/directory
+            self.listData = ""
+            self.directoryToRead = ""
+            #No optional parameter
+            if len(self.myCommand) == 1:
+                #Print currend directory
+                self.directoryToRead = self.directory
+            else:
+                #Get full path of parameter
+                self.directoryToRead = os.path.join(self.directory, self.myCommand[1])
+            
+            #Make sure the path exists
+            if os.path.exists(self.directoryToRead):
+                self.directoryToRead = os.path.realpath(self.directoryToRead)
+                #Make sure the path is in the FTP environment
+                if self.directoryToRead.startswith(MAIN_PATH):
+                    #Is the path a directory?
+                    if os.path.isdir(self.directoryToRead):
+                        self.listData = self.getDirectoryListing(self.directoryToRead)
+                    #Is the path a file?
+                    elif os.path.isfile(self.directoryToRead):
+                        self.listData = self.getFileListing(self.directoryToRead)
+
+                
             if self.active:
                 #Connect to client's data port
                 print("Active")
@@ -280,10 +313,12 @@ class FTPClient(Thread):
                 #Accept connection and send data
                 self.DATA_SOCKET, self.addr = self.DATA_SOCKET.accept()
                 self.sendResponse(responseCode[150])
-                if self.sendData(self.getDirectoryListing()):
+
+                if self.sendData(self.listData.rstrip(CRLF)):
                     self.sendResponse(responseCode[226])
                 else:
                     self.sendResponse(responseCode[426])
+
                 self.DATA_SOCKET.close()
                 self.DATA_SOCKET = None
 
