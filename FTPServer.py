@@ -31,6 +31,7 @@ BUFFER_SIZE = 1024
 PORT_NUM = None
 LOG_FILE = None
 VERBOSE = False
+LOCAL_IP = ""
 USERS = {}
 CRLF = "\r\n"
 
@@ -61,9 +62,11 @@ class FTPClient(Thread):
         self.port = port
         self.sock = sock
         self.user = None
+        self.active = True
         self.state = "Prompt USER" 
         self.authenticated = False
-        self.directory = MAIN_PATH
+        self.directory = MAIN_PATH  
+        self.DATA_SOCKET = None
 
     """Read command from client"""
     def readCommand(self):
@@ -84,6 +87,42 @@ class FTPClient(Thread):
             return True
         except:
             return False
+
+    """Send data over the data connection"""
+    def sendData(self, data):
+        try:
+            log("(" + self.ip + ", " + str(self.port) + ") SENT: DATA OVER DATA CONNECTION")
+            self.DATA_SOCKET.send(data + CRLF)
+            return True
+        except:
+            return False
+
+    """Converts permissions number from os.stat into a string representation : ex. -rwx-rw-rw-"""
+    def convertPermissions(self, num):
+        self.permCodes = {'7':'rwx', '6' : 'rw-', '5' : 'r-x', '4' : 'r--', '3': '-wx', '2' : '-w-', '1' : '--x', '0' : '---'}
+        self.permString = 'd' if stat.S_ISDIR(num) else '-'
+
+        self.permissions = str(oct(num)[-3:])
+        for self.p in self.permissions:
+            self.permString += self.permCodes[self.p]
+
+        return self.permString
+
+    """Get the full listing information for every file/directory in the current directory"""
+    def getDirectoryListing(self):
+        self.Listing = ""
+        for self.f in sorted(os.listdir(self.directory)):
+            self.fileInfo = os.stat(os.path.join(self.directory, self.f))
+            self.filePermissions = self.convertPermissions(self.fileInfo[0])
+            self.fileLinks = str(self.fileInfo[3])
+            self.fileOwner = str(self.fileInfo[4])
+            self.fileGroup = str(self.fileInfo[5])
+            self.fileSize = str(self.fileInfo[6])
+            self.fileModified = datetime.datetime.fromtimestamp(self.fileInfo[8]).strftime("%b %d %H:%M")
+            self.fileName = self.f
+            self.Listing += self.filePermissions + "\t" + self.fileLinks + " " + self.fileOwner + "\t" + self.fileGroup + "\t" + self.fileSize + "\t" + self.fileModified + "\t" + self.fileName + CRLF
+        
+        return self.Listing
 
     #ACCESS CONTROL COMMANDS
 
@@ -162,7 +201,29 @@ class FTPClient(Thread):
 
     """FTP PASV COMMAND"""
     def ftp_pasv(self):
-        self.sendResponse(responseCode[502])
+        if not self.state == "Main":
+            self.sendResponse(responseCode[503])
+        elif not self.authenticated:
+            self.sendResponse(responseCode[530])
+        else:
+            #Open the Data Socket & bind it to an open port
+            self.DATA_SOCKET = socket(AF_INET, SOCK_STREAM)
+            self.DATA_SOCKET.bind((LOCAL_IP, 0))
+            self.active = False
+
+            #Get the header information (h1,h2,h3,h4,p1,p2)
+            self.DATA_PORT = int(self.DATA_SOCKET.getsockname()[1])
+            self.p2 = self.DATA_PORT % 256
+            self.p1 = (self.DATA_PORT - self.p2) / 256
+            self.h = ','.join(LOCAL_IP.split('.'))
+            self.headers = "(" + self.h + ',' + str(self.p1) + ',' + str(self.p2) + ")."
+
+            #Listen on the socket
+            self.DATA_SOCKET.listen(1)
+
+            #Send the header information to the client
+            self.sendResponse(responseCode[227] + self.headers)
+        
 
     """FTP EPSV COMMAND"""
     def ftp_epsv(self):
@@ -205,7 +266,27 @@ class FTPClient(Thread):
 
     """FTP LIST COMMAND"""
     def ftp_list(self):
-        self.sendResponse(responseCode[502])
+        if not self.state == "Main":
+            self.sendResponse(responseCode[503])
+        elif not self.authenticated:
+            self.sendResponse(responseCode[530])
+        elif not self.DATA_SOCKET:
+            self.sendResponse(responseCode[425])
+        else:
+            if self.active:
+                #Connect to client's data port
+                print("Active")
+            else:
+                #Accept connection and send data
+                self.DATA_SOCKET, self.addr = self.DATA_SOCKET.accept()
+                self.sendResponse(responseCode[150])
+                if self.sendData(self.getDirectoryListing()):
+                    self.sendResponse(responseCode[226])
+                else:
+                    self.sendResponse(responseCode[426])
+                self.DATA_SOCKET.close()
+                self.DATA_SOCKET = None
+
 
     """FTP SYST COMMAND"""
     def ftp_syst(self):
@@ -295,11 +376,26 @@ def populateUsers(user_file):
         exit()
 
 
+
+"""
+Get the IP of the machine the script is running on.
+Running gethostbyname() and gethostname() doesn't seem to work on Ubuntu, so I have to do it this way.
+Create a connection to some public server and read the source IP of the connection
+"""
+def getMyIP():
+    sock = socket(AF_INET, SOCK_DGRAM)
+    sock.connect(("8.8.8.8", 80))
+    myIP = sock.getsockname()[0]
+    sock.close()
+    return myIP
+
+
+
 """
 Parse the command line arguments and set the global values
 """
 def initializeGlobals():
-    global LOG_FILE, PORT_NUM, VERBOSE, USERS
+    global LOG_FILE, PORT_NUM, VERBOSE, USERS, LOCAL_IP
     parser = argparse.ArgumentParser(description = "FTP Server written by Alex M Brown.", epilog = 'Later Sk8r \m/(>.<)')
     parser.add_argument('-v', '--verbose', action='store_true', help="Print logging information to stdout. Useful for debugging.")
     parser.add_argument('LOG_FILE', help="The name of the file for the server logs.")
@@ -311,6 +407,7 @@ def initializeGlobals():
     VERBOSE = args['verbose']
 
     USERS = populateUsers(USER_FILE)
+    LOCAL_IP = getMyIP()
 
 
 
@@ -331,9 +428,10 @@ def main():
     log("------------------------------New Session------------------------------")
 
     RECV_SOCKET = socket(AF_INET, SOCK_STREAM)
-    RECV_SOCKET.bind(('',PORT_NUM))
+    RECV_SOCKET.bind(('0.0.0.0',PORT_NUM))
     RECV_SOCKET.listen(5)
     print("Ready...")
+    log("SERVER IP ADDRESS: " + LOCAL_IP)
     log("SERVER LISTENING ON SOCKET: " + str(RECV_SOCKET.getsockname()))
     while True:
         newSocket, newAddress = RECV_SOCKET.accept()
