@@ -63,10 +63,38 @@ class FTPClient(Thread):
         self.sock = sock
         self.user = None
         self.active = True
+        self.data_address = None
         self.state = "Prompt USER" 
         self.authenticated = False
         self.directory = MAIN_PATH  
         self.DATA_SOCKET = None
+
+    """Create a socket and connect it to address"""
+    def establishConnection(self, address):
+        self.CONNECTION = socket(AF_INET, SOCK_STREAM)
+        log("(" + self.ip + ", " + str(self.port) + ") NOTE: Establishing connection to " + str(address))
+        try:
+            self.CONNECTION.settimeout(5)
+            self.CONNECTION.connect(address)
+            log("(" + self.ip + ", " + str(self.port) + ") NOTE: Connection established with " + str(address))
+            return self.CONNECTION
+        except:
+            log("(" + self.ip + ", " + str(self.port) + ") NOTE: Failed to establish connection")
+            return None
+
+    """Accept a connection from listener and return the socket of the connection"""
+    def receiveConnection(self, listener):
+        self.CONNECTION = socket(AF_INET, SOCK_STREAM)
+        log("(" + self.ip + ", " + str(self.port) + ") NOTE: Accepting connection on " + str(listener.getsockname()))
+        try:
+            listener.settimeout(5)
+            self.CONNECTION, self.addr = listener.accept()
+            log("(" + self.ip + ", " + str(self.port) + ") NOTE: Accepted connection from " + str(self.addr))
+            return self.CONNECTION
+        except:
+            log("(" + self.ip + ", " + str(self.port) + ") NOTE: Failed to receive connection")
+            return None
+        
 
     """Read command from client"""
     def readCommand(self):
@@ -156,7 +184,7 @@ class FTPClient(Thread):
             self.state = "Main"
             self.authenticated = True
             self.sendResponse(responseCode[230])
-            log("(" + self.ip + ", " + str(self.port) + ") NOTE: User logged in: " + self.user)
+            log("(" + self.ip + ", " + str(self.port) + ") NOTE: Logged in as: " + self.user)
         else:
             self.sendResponse(responseCode[530])
             self.state = "Prompt USER"
@@ -237,7 +265,19 @@ class FTPClient(Thread):
 
     """FTP PORT COMMAND"""
     def ftp_port(self):
-        self.sendResponse(responseCode[502])
+        if not self.state == "Main":
+            self.sendResponse(responseCode[503])
+        elif not self.authenticated:
+            self.sendResponse(responseCode[530])
+        else:
+            self.active = True
+            self.port_headers = self.myCommand[1].split(',')
+            self.data_ip = '.'.join(self.port_headers[0:4])
+            self.data_port = int(self.port_headers[4]) * 256 + int(self.port_headers[5])
+            self.data_address = (self.data_ip, self.data_port)
+            self.DATA_SOCKET = socket(AF_INET, SOCK_STREAM)
+        
+            self.sendResponse(responseCode[200])
 
     """FTP EPRT COMMAND"""
     def ftp_eprt(self):
@@ -308,17 +348,25 @@ class FTPClient(Thread):
                 
             if self.active:
                 #Connect to client's data port
-                print("Active")
+                self.DATA_SOCKET = self.establishConnection(self.data_address)
             else:
-                #Accept connection and send data
-                self.DATA_SOCKET, self.addr = self.DATA_SOCKET.accept()
-                self.sendResponse(responseCode[150])
+                #Accept a connection from the client
+                self.DATA_SOCKET = self.receiveConnection(self.DATA_SOCKET)
 
+            #Was the data connection opened correctly?
+            if not self.DATA_SOCKET:
+                #Failed to open connection
+                self.sendResponse(responseCode[425])
+            else:
+                self.sendResponse(responseCode[150])
                 if self.sendData(self.listData.rstrip(CRLF)):
+                    #Data sent OK
                     self.sendResponse(responseCode[226])
                 else:
+                    #Data failed to send
                     self.sendResponse(responseCode[426])
 
+                log("(" + self.ip + ", " + str(self.port) + ") NOTE: Data connection closed")
                 self.DATA_SOCKET.close()
                 self.DATA_SOCKET = None
 
