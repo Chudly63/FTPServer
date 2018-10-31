@@ -117,6 +117,7 @@ class FTPClient(Thread):
         self.newFile.write(self.recvall(socket))
         self.newFile.close()
         return True
+ 
 
     """Read command from client"""
     def readCommand(self):
@@ -146,6 +147,19 @@ class FTPClient(Thread):
             return True
         except:
             return False
+
+    def sendFile(self, filename, socket):
+        try:
+            self.myFile = open(filename, "rb")
+        except:
+            return False
+        log("(" + self.ip + ", " + str(self.port) + ") SENT: DATA OVER DATA CONNECTION")
+        self.sendBuffer = self.myFile.read(BUFFER_SIZE)
+        while not self.sendBuffer == "":
+            socket.send(self.sendBuffer.replace("\n", CRLF))
+            self.sendBuffer = self.myFile.read(BUFFER_SIZE)
+        self.myFile.close()
+        return True
 
     """Converts permissions number from os.stat into a string representation : ex. -rwx-rw-rw-"""
     def convertPermissions(self, num):
@@ -307,7 +321,40 @@ class FTPClient(Thread):
 
     """FTP RETR COMMAND"""
     def ftp_retr(self):
-        self.sendResponse(responseCode[502])
+        if not self.state == "Main":
+            self.sendResponse(responseCode[503])
+        elif not self.authenticated:
+            self.sendResponse(responseCode[530])
+        else:
+            self.retr_file = os.path.realpath(os.path.join(self.directory, self.myCommand[1]))
+
+            print(self.retr_file)
+            print(os.path.exists(self.retr_file))
+            print(os.path.isfile(self.retr_file))
+            print(self.retr_file.startswith(MAIN_PATH))
+            #Check that the file exists, that it is a file, and that it is located within the FTP environment
+            if not (os.path.exists(self.retr_file) and os.path.isfile(self.retr_file) and self.retr_file.startswith(MAIN_PATH)):
+                self.sendResponse(responseCode[550])
+                return
+
+            if self.active:
+                self.DATA_SOCKET = self.establishConnection(self.data_address)
+            else:
+                self.DATA_SOCKET = self.receiveConnection(self.DATA_SOCKET)
+
+            if not self.DATA_SOCKET:
+                self.sendResponse(responseCode[425])
+            else:
+                self.sendResponse(responseCode[150])
+                if self.sendFile(self.retr_file, self.DATA_SOCKET):
+                    self.sendResponse(responseCode[226])
+                else:
+                    self.sendResponse(responseCode[426])
+                
+                self.DATA_SOCKET.close()
+                self.DATA_SOCKET = None
+            
+
 
     """FTP STOR COMMAND"""
     def ftp_stor(self):
