@@ -114,7 +114,7 @@ class FTPClient(Thread):
             self.newFile = open(filename, "wb")
         except:
             return False
-        self.newFile.write(self.recvall(socket))
+        self.newFile.write(self.recvall(socket).replace(CRLF, "\n"))
         self.newFile.close()
         return True
  
