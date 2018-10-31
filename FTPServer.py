@@ -13,7 +13,6 @@ import argparse
 import platform
 import datetime
 import stat
-import time
 import sys
 import csv
 import os
@@ -148,6 +147,7 @@ class FTPClient(Thread):
         except:
             return False
 
+    """Send the contents of a file over the socket"""
     def sendFile(self, filename, socket):
         try:
             self.myFile = open(filename, "rb")
@@ -252,27 +252,37 @@ class FTPClient(Thread):
     
     """FTP CDUP COMMAND"""
     def ftp_cdup(self):
+        #Verify state of the client
         if not self.state == "Main":
             self.sendResponse(responseCode[503])
+        #Verify the client is authenticated
         elif not self.authenticated:
             self.sendResponse(responseCode[530])
         else:
+            #If the current directory is the root of the FTP environment, send error
             if self.directory == MAIN_PATH:
                 self.sendResponse(responseCode[550])
             else:
+                #Move to parent directory
                 self.directory = os.path.split(self.directory)[0]
                 self.sendResponse(responseCode[250])
 
     """FTP QUIT COMMAND"""
     def ftp_quit(self):
-        self.sendResponse(responseCode[502])
+        self.sendResponse(responseCode[221])
+        if self.DATA_SOCKET:
+            self.DATA_SOCKET.close()
+        if self.sock:
+            self.sock.close()
 
     #DATA TRANSFER COMMANDS
 
     """FTP PASV COMMAND"""
     def ftp_pasv(self):
+        #Verify the state of the client
         if not self.state == "Main":
             self.sendResponse(responseCode[503])
+        #Verify the client is authenticated
         elif not self.authenticated:
             self.sendResponse(responseCode[530])
         else:
@@ -301,15 +311,21 @@ class FTPClient(Thread):
 
     """FTP PORT COMMAND"""
     def ftp_port(self):
+        #Verify the state of the client
         if not self.state == "Main":
             self.sendResponse(responseCode[503])
+        #Verify the client is authenticated
         elif not self.authenticated:
             self.sendResponse(responseCode[530])
         else:
+            #Enable active mode (Server initiates data connection on requests)
             self.active = True
+            #Read the headers sent from the client (h1,h2,h3,h4,p1,p2)
+            #The address for the server to connect to is h1.h2.h3.h4 on port 256*p1 + p2
             self.port_headers = self.myCommand[1].split(',')
             self.data_ip = '.'.join(self.port_headers[0:4])
             self.data_port = int(self.port_headers[4]) * 256 + int(self.port_headers[5])
+            #Store the address of the client's data socket for connection upon request
             self.data_address = (self.data_ip, self.data_port)
             self.DATA_SOCKET = socket(AF_INET, SOCK_STREAM)
         
@@ -321,30 +337,33 @@ class FTPClient(Thread):
 
     """FTP RETR COMMAND"""
     def ftp_retr(self):
+        #Verify the state of the client
         if not self.state == "Main":
             self.sendResponse(responseCode[503])
+        #Verify the client is authenticated
         elif not self.authenticated:
             self.sendResponse(responseCode[530])
         else:
+            #Get the path of the requested file
             self.retr_file = os.path.realpath(os.path.join(self.directory, self.myCommand[1]))
 
-            print(self.retr_file)
-            print(os.path.exists(self.retr_file))
-            print(os.path.isfile(self.retr_file))
-            print(self.retr_file.startswith(MAIN_PATH))
             #Check that the file exists, that it is a file, and that it is located within the FTP environment
             if not (os.path.exists(self.retr_file) and os.path.isfile(self.retr_file) and self.retr_file.startswith(MAIN_PATH)):
                 self.sendResponse(responseCode[550])
                 return
 
             if self.active:
+                #Connect to the client
                 self.DATA_SOCKET = self.establishConnection(self.data_address)
             else:
+                #Accept connection from the client
                 self.DATA_SOCKET = self.receiveConnection(self.DATA_SOCKET)
 
             if not self.DATA_SOCKET:
+                #Connection failed
                 self.sendResponse(responseCode[425])
             else:
+                #Send the data
                 self.sendResponse(responseCode[150])
                 if self.sendFile(self.retr_file, self.DATA_SOCKET):
                     self.sendResponse(responseCode[226])
@@ -358,13 +377,17 @@ class FTPClient(Thread):
 
     """FTP STOR COMMAND"""
     def ftp_stor(self):
+        #Verify the state of the client
         if not self.state == "Main":
             self.sendResponse(responseCode[503])
+        #Verify the client is authenticated
         elif not self.authenticated:
             self.sendResponse(responseCode[530])
         else:
+            #Get the path for the file to be stored
             self.stor_file = os.path.realpath(os.path.join(self.directory, self.myCommand[1]))
             
+            #Verify the path is within the FTP environment
             if not self.stor_file.startswith(MAIN_PATH):
                 self.sendResponse(responseCode[553])
                 return
@@ -377,8 +400,10 @@ class FTPClient(Thread):
                 self.DATA_SOCKET = self.receiveConnection(self.DATA_SOCKET)
 
             if not self.DATA_SOCKET:
+                #Connection failed
                 self.sendResponse(responseCode[425])
             else:
+                #Read data
                 self.sendResponse(responseCode[150])
                 if self.readFile(self.stor_file, self.DATA_SOCKET):
                     self.sendResponse(responseCode[226])
@@ -471,11 +496,14 @@ class FTPClient(Thread):
 
     """FTP SYST COMMAND"""
     def ftp_syst(self):
+        #Verify the client is authenticated
         if not self.authenticated:
             self.sendResponse(responseCode[530])
+        #Verify the state of the client
         elif not self.state == "Main":
             self.sendResponse(responseCode[503])
         else:
+            #Send system information
             self.sendResponse("215 " + str(platform.system()))
         
     """FTP HELP COMMAND"""
@@ -615,12 +643,15 @@ def main():
     log("SERVER IP ADDRESS: " + LOCAL_IP)
     log("SERVER LISTENING ON SOCKET: " + str(RECV_SOCKET.getsockname()))
     while True:
+        #Accept a connection and create an FTPClient object for the new connection
         newSocket, newAddress = RECV_SOCKET.accept()
         log("(" + newAddress[0] + ", " + str(newAddress[1]) + ") NOTE: CONNECTED")
         newClient = FTPClient(newAddress[0], newAddress[1], newSocket)
         CLIENTS.append(newClient)
         newSocket.send("220 Welcome to Alex's FTP Server\r\n")
         newClient.start()
+        CLIENTS = [c for c in CLIENTS if c.isAlive()]   #Remove disconnected clients
+        log("SERVER IS CURRENTLY SERVING " + str(len(CLIENTS)) + " CLIENT(S)")
 
 
 

@@ -1,6 +1,7 @@
 responseCode = {
     150 : "150 Here comes the data.",
     200 : "200 PORT command successful. Consider using PASV.",
+    221 : "221 Later Sk8r ;* <33",
     226 : "226 Data sent OK. Closing connection.",
     227 : "227 Entering Passive Mode ",
     230 : "230 User logged in, proceed.",
