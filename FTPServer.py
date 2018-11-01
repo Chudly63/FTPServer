@@ -307,7 +307,21 @@ class FTPClient(Thread):
 
     """FTP EPSV COMMAND"""
     def ftp_epsv(self):
-        self.sendResponse(responseCode[502])
+        if not self.authenticated:
+            self.sendResponse(responseCode[530])
+        elif not self.myCommand[1] == "1":
+            self.sendResponse(responseCode[522])
+        else:
+            self.DATA_SOCKET = socket(AF_INET, SOCK_STREAM)
+            self.DATA_SOCKET.bind((LOCAL_IP, 0))
+            self.active = False
+
+            self.DATA_PORT = self.DATA_SOCKET.getsockname()[1]
+            self.headers = "(|||"+ str(self.DATA_PORT) + "|)"
+
+            self.DATA_SOCKET.listen(1)
+
+            self.sendResponse(responseCode[229] + self.headers)
 
     """FTP PORT COMMAND"""
     def ftp_port(self):
@@ -333,7 +347,16 @@ class FTPClient(Thread):
 
     """FTP EPRT COMMAND"""
     def ftp_eprt(self):
-        self.sendResponse(responseCode[502])
+        if not self.authenticated:
+            self.sendResponse(responseCode[530])
+        elif not self.myCommand[1] == '1':
+            self.sendResponse(responseCode[522])
+        else:
+            self.active = True
+            self.data_address = (self.myCommand[2], int(self.myCommand[3]))
+            self.DATA_SOCKET = socket(AF_INET, SOCK_STREAM)
+
+            self.sendResponse(responseCode[200])
 
     """FTP RETR COMMAND"""
     def ftp_retr(self):
