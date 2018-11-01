@@ -508,7 +508,41 @@ class FTPClient(Thread):
         
     """FTP HELP COMMAND"""
     def ftp_help(self):
-        self.sendResponse(responseCode[502])
+        if len(self.myCommand) == 1:
+            self.sendResponse("214-Supported Commands\nUSER PASS CWD CDUP QUIT\nPASV EPSV PORT EPRT\nRETR STOR PWD LIST\n214 SYST HELP")
+        else:
+            if self.myCommand[1] == "USER":
+                self.sendResponse("214-USER <username>\n<username> := String\n214 Indicateds the username of the client account")
+            elif self.myCommand[1] == "PASS":
+                self.sendResponse("214-PASS <password>\n<password> := String\n214 Indicateds the password of the client account")
+            elif self.myCommand[1] == "CWD":
+                self.sendResponse("214-CWD <directory>\n<directory> := String\n214 Change the current directory to <directory>")
+            elif self.myCommand[1] == "CDUP":
+                self.sendResponse("214-CDUP\n214 Change the current directory to the parent directory")
+            elif self.myCommand[1] == "QUIT":
+                self.sendResponse("214-QUIT\n214 Terminates client connection")
+            elif self.myCommand[1] == "PASV":
+                self.sendResponse("214-PASV\n214 Tell the server to open a socket for the data connection")
+            elif self.myCommand[1] == "EPSV":
+                self.sendResponse("214-EPSV <protocol>\n<protocol> := int\n214 Tell the server to open a socket for the data connection")
+            elif self.myCommand[1] == "PORT":
+                self.sendResponse("214-PORT <h1>,<h2>,<h3>,<h4>,<p1>,<p2>\n<h> := IP Address, <p> := Port Number\n214 Tell the server to connect to a socket for the data connetion")
+            elif self.myCommand[1] == "EPRT":
+                self.sendResponse("214-EPRT <d><protocol><d><address><d><port><d>\n<d> := '|', <address> := IP Address, <port> := Port Number\n214 Tell the server to connect to a socket for the data connection")
+            elif self.myCommand[1] == "RETR":
+                self.sendResponse("214-RETR <pathname>\n<pathname> := String\n214 Get the file located at <pathname>")
+            elif self.myCommand[1] == "STOR":
+                self.sendResponse("214-STOR <pathname>\n<pathname> := String\n214 Store a file at location <pathname>")
+            elif self.myCommand[1] == "PWD":
+                self.sendResponse("214-PWD\n214 Display the current directory")
+            elif self.myCommand[1] == "LIST":
+                self.sendResponse("214-LIST [<pathname>]\n<pathname> := String\n214 Display the contents of a directory. Default is current directory")
+            elif self.myCommand[1] == "SYST":
+                self.sendResponse("214-SYST\n214 Display the system information of the server")
+            elif self.myCommand[1] == "HELP":
+                self.sendResponse("214-HELP [<command>]\n<command> := String\n214 This command, you silly billy")
+            else:
+                self.sendResponse(responseCode[502])
 
     """
     FTP CLIENT MAIN
