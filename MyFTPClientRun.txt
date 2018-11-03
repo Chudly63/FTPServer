@@ -1,0 +1,30 @@
+﻿Script started on Sat 03 Nov 2018 11:07:47 AM EDT
+python FTPClient.py  153.33.47.112 whatever.log 21000
+
+Enter Username: amb597
+Enter Password: 
+Welcome to Alex Brown's FTP Client!
+
+Supported Commands:       
+    about   cd      eprt    epsv
+    get     help    ls      pasv
+    port    put     pwd     quit
+
+myFTP> pasv
+Entering passive mode...
+Data connection ready.
+myFTP> ls
+Enter optional file/directory: 
+-rw-rw-r--	1 1000	1000	112757	Oct 26 11:51	chess.JPG
+drwxrwxr-x	3 1000	1000	4096	Oct 30 15:43	dir1
+drwxrwxr-x	2 1000	1000	4096	Oct 30 10:51	dir2
+drwxrwxr-x	2 1000	1000	4096	Oct 31 09:47	dir3
+
+myFTP> pasv
+Entering passive mode...
+Data connection ready.
+myFTP> put
+Enter name of your file: conspiracy.txt
+myFTP> quit
+
+Script done on Sat 03 Nov 2018 11:09:34 AM EDT

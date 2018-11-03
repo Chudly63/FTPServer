@@ -63,7 +63,6 @@ class FTPClient(Thread):
         self.active = True
         self.data_address = None
         self.state = "Prompt USER" 
-        self.authenticated = False
         self.directory = MAIN_PATH  
         self.DATA_SOCKET = None
 
@@ -222,7 +221,6 @@ class FTPClient(Thread):
         #Is the password correct for the current user?
         elif self.myCommand[1] == USERS[self.user]:
             self.state = "Main"
-            self.authenticated = True
             self.sendResponse(responseCode[230])
             log("(" + self.ip + ", " + str(self.port) + ") NOTE: Logged in as: " + self.user)
         else:
@@ -663,6 +661,7 @@ Establish a receiving port.
 Create an FTPClient object for each client that connects.
 """
 def main():
+    #Attempt to establish a socket using the system's IP and the specified Port number. Exit if it fails. 
     try:
         global CLIENTS
 
@@ -683,6 +682,7 @@ def main():
         print("Error during server setup")
         print(e)
         exit()
+    #Socket set up and ready
     while True:
         #Accept a connection and create an FTPClient object for the new connection
         newSocket, newAddress = RECV_SOCKET.accept()

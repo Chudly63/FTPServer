@@ -1,0 +1,73 @@
+﻿ftp 153.33.47.112  21000
+
+Connected to 153.33.47.112.
+220 Welcome to Alex's FTP Server
+Name (153.33.47.112:abrown): cs472
+331 User OK, need password.
+Password:
+230 User logged in, proceed.
+Remote system type is Linux.
+ftp> ls
+200 PORT command successful. Consider using PASV.
+150 Here comes the data.
+-rw-rw-r--	1 1000	1000	112757	Oct 26 11:51	chess.JPG
+-rw-rw-r--	1 1000	1000	1966	Nov 03 11:08	conspiracy.txt
+drwxrwxr-x	3 1000	1000	4096	Oct 30 15:43	dir1
+drwxrwxr-x	2 1000	1000	4096	Oct 30 10:51	dir2
+drwxrwxr-x	2 1000	1000	4096	Oct 31 09:47	dir3
+226 Data sent OK. Closing connection.
+ftp> passive
+Passive mode on.
+ftp> ls
+227 Entering Passive Mode (153,33,47,112,136,161).
+150 Here comes the data.
+-rw-rw-r--	1 1000	1000	112757	Oct 26 11:51	chess.JPG
+-rw-rw-r--	1 1000	1000	1966	Nov 03 11:08	conspiracy.txt
+drwxrwxr-x	3 1000	1000	4096	Oct 30 15:43	dir1
+drwxrwxr-x	2 1000	1000	4096	Oct 30 10:51	dir2
+drwxrwxr-x	2 1000	1000	4096	Oct 31 09:47	dir3
+226 Data sent OK. Closing connection.
+ftp> cd i##[Kdir1
+250 Requested file action ok, completed.
+ftp> ls
+227 Entering Passive Mode (153,33,47,112,193,21).
+150 Here comes the data.
+drwxrwxr-x	2 1000	1000	4096	Oct 31 09:17	dir11
+226 Data sent OK. Closing connection.
+ftp> cd##[K##[Kls dir11
+227 Entering Passive Mode (153,33,47,112,150,111).
+150 Here comes the data.
+-rw-rw-r--	1 1000	1000	918	Oct 26 13:29	wah.txt
+226 Data sent OK. Closing connection.
+ftp> cd ..
+250 Requested file action ok, completed.
+ftp> cd dir3
+250 Requested file action ok, completed.
+ftp> ls
+227 Entering Passive Mode (153,33,47,112,220,79).
+150 Here comes the data.
+
+226 Data sent OK. Closing connection.
+ftp> put pumpkin.jpg
+local: pumpkin.jpg remote: pumpkin.jpg
+227 Entering Passive Mode (153,33,47,112,155,211).
+150 Here comes the data.
+226 Data sent OK. Closing connection.
+606250 bytes sent in 0.02 secs (38.1300 MB/s)
+ftp> passive
+Passive mode off.
+ftp> ls
+200 PORT command successful. Consider using PASV.
+150 Here comes the data.
+-rw-rw-r--	1 1000	1000	603934	Nov 03 11:09	pumpkin.jpg
+226 Data sent OK. Closing connection.
+ftp> cdup
+250 Requested file action ok, completed.
+ftp> cdup
+550 Requested action not taken.
+ftp> pwd
+257 / is the current working directory
+ftp> quit
+221 Later Sk8r ;* <33
+
+Script done on Sat 03 Nov 2018 11:09:31 AM EDT
