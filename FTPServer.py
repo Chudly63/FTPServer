@@ -7,8 +7,8 @@
 
 from socket import *
 from threading import Thread
-from requestParser import parseCommand
-from Responses import responseCode
+from requestParser import parseCommand  #Script I wrote that parses strings into lists containing commands and their parameters
+from Responses import responseCode      #Separate file that hosts a dictionary of response numbers and strings
 import argparse
 import platform
 import datetime
@@ -46,8 +46,6 @@ def log(message):
         logtime = str(datetime.datetime.now())[:-3]
         logfile.write(logtime + ": " + message + "\n")
 
-
-#[Errno 98] Address already in use
 
 """
 FTPClient Class. Extension of python's Thread class.
@@ -121,11 +119,17 @@ class FTPClient(Thread):
     """Read command from client"""
     def readCommand(self):
         try:
-            self.command = self.sock.recv(BUFFER_SIZE)
-            if self.command == "":
-                return None
-            log("(" + self.ip + ", " + str(self.port) + ") READ: " + self.command[:-2])
-            return self.command
+            self.commandBuffer = ""
+            while(True):
+                #Read from the input stream one byte at a time until a CRLF is read
+                self.command = self.sock.recv(1)
+                if self.command == "":
+                    #Client disconnected
+                    return None
+                self.commandBuffer += self.command
+                if CRLF in self.commandBuffer:
+                    log("(" + self.ip + ", " + str(self.port) + ") READ: " + self.commandBuffer[:-2])
+                    return self.commandBuffer
         except:
             return None  
 
@@ -198,8 +202,8 @@ class FTPClient(Thread):
 
     """FTP USER COMMAND"""
     def ftp_user(self):
-        #Verify the state of the client
-        if not self.state == "Prompt USER":
+        #Verify the state of the client. Should only run in Prompt USER or Main phase
+        if self.state == "Prompt PASS":
             self.sendResponse(responseCode[503])
         else:
             self.user = self.myCommand[1]
@@ -229,9 +233,6 @@ class FTPClient(Thread):
     def ftp_cwd(self):
         #Verify the state of the client
         if not self.state == "Main":
-            self.sendResponse(responseCode[503])
-        #Verify the client is authenticated
-        elif not self.authenticated:
             self.sendResponse(responseCode[530])
         else:
             #Generate the path to the requested directory and verify it exists
@@ -254,9 +255,6 @@ class FTPClient(Thread):
     def ftp_cdup(self):
         #Verify state of the client
         if not self.state == "Main":
-            self.sendResponse(responseCode[503])
-        #Verify the client is authenticated
-        elif not self.authenticated:
             self.sendResponse(responseCode[530])
         else:
             #If the current directory is the root of the FTP environment, send error
@@ -281,9 +279,6 @@ class FTPClient(Thread):
     def ftp_pasv(self):
         #Verify the state of the client
         if not self.state == "Main":
-            self.sendResponse(responseCode[503])
-        #Verify the client is authenticated
-        elif not self.authenticated:
             self.sendResponse(responseCode[530])
         else:
             #Open the Data Socket & bind it to an open port
@@ -307,10 +302,13 @@ class FTPClient(Thread):
 
     """FTP EPSV COMMAND"""
     def ftp_epsv(self):
-        if not self.authenticated:
+        #Verify the state of the client
+        if not self.state == "Main":
             self.sendResponse(responseCode[530])
+        #Check if the command is using IPv4 (IPv6 is not supported)
         elif not self.myCommand[1] == "1":
             self.sendResponse(responseCode[522])
+        #Create a socket and send the port number in the response
         else:
             self.DATA_SOCKET = socket(AF_INET, SOCK_STREAM)
             self.DATA_SOCKET.bind((LOCAL_IP, 0))
@@ -327,9 +325,6 @@ class FTPClient(Thread):
     def ftp_port(self):
         #Verify the state of the client
         if not self.state == "Main":
-            self.sendResponse(responseCode[503])
-        #Verify the client is authenticated
-        elif not self.authenticated:
             self.sendResponse(responseCode[530])
         else:
             #Enable active mode (Server initiates data connection on requests)
@@ -347,7 +342,7 @@ class FTPClient(Thread):
 
     """FTP EPRT COMMAND"""
     def ftp_eprt(self):
-        if not self.authenticated:
+        if not self.state == "Main":
             self.sendResponse(responseCode[530])
         elif not self.myCommand[1] == '1':
             self.sendResponse(responseCode[522])
@@ -362,9 +357,6 @@ class FTPClient(Thread):
     def ftp_retr(self):
         #Verify the state of the client
         if not self.state == "Main":
-            self.sendResponse(responseCode[503])
-        #Verify the client is authenticated
-        elif not self.authenticated:
             self.sendResponse(responseCode[530])
         else:
             #Get the path of the requested file
@@ -402,9 +394,6 @@ class FTPClient(Thread):
     def ftp_stor(self):
         #Verify the state of the client
         if not self.state == "Main":
-            self.sendResponse(responseCode[503])
-        #Verify the client is authenticated
-        elif not self.authenticated:
             self.sendResponse(responseCode[530])
         else:
             #Get the path for the file to be stored
@@ -443,9 +432,6 @@ class FTPClient(Thread):
     def ftp_pwd(self):
         #Verify the state of the client
         if not self.state == "Main":
-            self.sendResponse(responseCode[503])
-        #Verify the user is authenticated
-        elif not self.authenticated:
             self.sendResponse(responseCode[530])
         else:
             #When showing the current directory, only show the path extending from the 
@@ -460,9 +446,6 @@ class FTPClient(Thread):
     def ftp_list(self):
         #Verify the state of the client
         if not self.state == "Main":
-            self.sendResponse(responseCode[503])
-        #Verify the client is authenticated
-        elif not self.authenticated:
             self.sendResponse(responseCode[530])
         #Verify that a data connection is prepared
         elif not self.DATA_SOCKET:
@@ -519,12 +502,9 @@ class FTPClient(Thread):
 
     """FTP SYST COMMAND"""
     def ftp_syst(self):
-        #Verify the client is authenticated
-        if not self.authenticated:
-            self.sendResponse(responseCode[530])
         #Verify the state of the client
-        elif not self.state == "Main":
-            self.sendResponse(responseCode[503])
+        if not self.state == "Main":
+            self.sendResponse(responseCode[530])
         else:
             #Send system information
             self.sendResponse("215 " + str(platform.system()))
@@ -644,9 +624,9 @@ def populateUsers(user_file):
 
 
 """
-Get the IP of the machine the script is running on.
+Get the IP of the machine the script is running on. This is needed to run PASV and EPSV.
 Running gethostbyname() and gethostname() doesn't seem to work on Ubuntu, so I have to do it this way.
-Create a connection to some public server and read the source IP of the connection
+Create a connection to a public DNS server and read the source IP of the connection.
 """
 def getMyIP():
     sock = socket(AF_INET, SOCK_DGRAM)
@@ -683,22 +663,26 @@ Establish a receiving port.
 Create an FTPClient object for each client that connects.
 """
 def main():
-    global CLIENTS
+    try:
+        global CLIENTS
 
-    #Set up an FTP environment if it does not already exist
-    if not os.path.isdir(MAIN_PATH):
-        os.makedirs(MAIN_PATH)
+        #Set up an FTP environment if it does not already exist
+        if not os.path.isdir(MAIN_PATH):
+            os.makedirs(MAIN_PATH)
 
-    initializeGlobals()
+        initializeGlobals()
 
-    log("------------------------------New Session------------------------------")
+        log("------------------------------New Session------------------------------")
 
-    RECV_SOCKET = socket(AF_INET, SOCK_STREAM)
-    RECV_SOCKET.bind(('0.0.0.0',PORT_NUM))
-    RECV_SOCKET.listen(5)
-    print("Ready...")
-    log("SERVER IP ADDRESS: " + LOCAL_IP)
-    log("SERVER LISTENING ON SOCKET: " + str(RECV_SOCKET.getsockname()))
+        RECV_SOCKET = socket(AF_INET, SOCK_STREAM)
+        RECV_SOCKET.bind(('0.0.0.0',PORT_NUM))
+        RECV_SOCKET.listen(5)
+        log("SERVER IP ADDRESS: " + LOCAL_IP)
+        log("SERVER LISTENING ON SOCKET: " + str(RECV_SOCKET.getsockname()))
+    except Exception as e:
+        print("Error during server setup")
+        print(e)
+        exit()
     while True:
         #Accept a connection and create an FTPClient object for the new connection
         newSocket, newAddress = RECV_SOCKET.accept()
